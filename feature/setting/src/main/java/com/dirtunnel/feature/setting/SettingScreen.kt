@@ -389,6 +389,23 @@ fun SettingScreen(
                 }
             }
 
+            // ===== 免责声明（README 同步声明） =====
+            item {
+                AppleSectionHeader("免责声明")
+                AppleGroupCard {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        AppleText(
+                            "本软件为个人兴趣开发产物，仅供个人学习、娱乐、非商业性质免费使用。" +
+                                "作者保留全部知识产权，未经书面许可不得二次开发、修改、复刻、" +
+                                "衍生创作或用于任何商业营利用途。使用者需遵守当地法律法规与" +
+                                "网络使用规范，违规使用的后果自行承担。",
+                            style = typography.caption,
+                            color = colors.textSecondary,
+                        )
+                    }
+                }
+            }
+
             item { Spacer(Modifier.height(8.dp)) }
         }
     }
