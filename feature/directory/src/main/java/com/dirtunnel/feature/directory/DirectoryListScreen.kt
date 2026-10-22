@@ -48,6 +48,7 @@ import com.dirtunnel.core.ui.components.AppleEmptyState
 import com.dirtunnel.core.ui.components.AppleGroupCard
 import com.dirtunnel.core.ui.components.AppleIcon
 import com.dirtunnel.core.ui.components.AppleIconButton
+import androidx.compose.material.icons.outlined.CreateNewFolder
 import com.dirtunnel.core.ui.components.AppleInputDialog
 import com.dirtunnel.core.ui.components.AppleOption
 import com.dirtunnel.core.ui.components.AppleOptionSheet
@@ -65,6 +66,7 @@ import com.dirtunnel.core.ui.theme.appleTypography
 @Composable
 fun DirectoryListScreen(
     onOpenDirectory: (directoryId: Long) -> Unit,
+    onOpenRawPicker: () -> Unit = {},
     viewModel: DirectoryViewModel = hiltViewModel(),
 ) {
     val hazeState = rememberHazeState()
@@ -184,6 +186,19 @@ fun DirectoryListScreen(
                             )
                         }
                     }
+                }
+            }
+
+            item {
+                AppleGroupCard {
+                    AppleCell(
+                        title = "受限目录直选",
+                        subtitle = "安卓 15+ 系统选择器禁选内部存储根 / Download / Android·data 等目录；" +
+                            "此入口经「所有文件访问」直接浏览原始路径选择",
+                        leadingIcon = Icons.Outlined.CreateNewFolder,
+                        showSeparator = false,
+                        onClick = onOpenRawPicker,
+                    )
                 }
             }
 

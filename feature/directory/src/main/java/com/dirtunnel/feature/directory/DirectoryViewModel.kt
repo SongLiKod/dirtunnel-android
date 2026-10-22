@@ -16,6 +16,7 @@ import com.dirtunnel.core.storage.saf.SaFDocumentTree
 import com.dirtunnel.core.ui.components.AppleAlert
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -231,6 +232,61 @@ class DirectoryViewModel @Inject constructor(
     /** 返回前台/权限页返回时刷新授权状态（onResume 由 UI 侧触发）。 */
     fun refreshOnResume() {
         refreshIssues()
+        // 「所有文件访问」授权页返回后，自动补加挂起的直选目录
+        val pending = pendingRawPath
+        if (pending != null && hasAllFilesAccess()) {
+            pendingRawPath = null
+            viewModelScope.launch { addRawNow(pending) }
+        }
+    }
+
+    // ===== 受限目录直选（Android 15+ 系统选择器禁选：内部存储根 / Download / Android·data 等） =====
+
+    /** 待直选路径：缺「所有文件访问」跳去授权时挂起，授权返回后自动完成添加。 */
+    @Volatile
+    private var pendingRawPath: String? = null
+
+    /** 是否已具备直选条件（安卓 11+ 需「所有文件访问」；更早版本无分区存储限制）。 */
+    fun hasAllFilesAccess(): Boolean =
+        Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
+
+    /**
+     * 经原始文件路径直选目录（绕过 SAF 系统选择器）：treeUri 置空 = 直连文件系统模式
+     * （[refreshIssues] 已按此模式校验，无需 SAF 授权）。缺权限时先引导授权，
+     * [refreshOnResume] 在授权返回后自动完成添加。
+     */
+    fun addDirectoryRaw(path: String) {
+        val normalized = path.trim().trimEnd('/')
+        if (normalized.isBlank()) return
+        viewModelScope.launch {
+            if (!hasAllFilesAccess()) {
+                pendingRawPath = normalized
+                requestAllFilesAccess()
+                _alert.value = AppleAlert(
+                    "需要「所有文件访问」权限",
+                    "直选受限目录（内部存储根目录、Download、Android/data 等）必须开启该权限。" +
+                        "方案：在系统设置中打开「允许访问所有文件」开关后返回本应用，将自动完成添加。",
+                )
+                return@launch
+            }
+            addRawNow(normalized)
+        }
+    }
+
+    private suspend fun addRawNow(path: String) {
+        val existing = withContext(Dispatchers.IO) {
+            directoryDao.getAll().find { it.treeUri.isBlank() && it.fsPath == path }
+        }
+        if (existing != null) {
+            directoryDao.touch(existing.id)
+            refreshIssues()
+            _alert.value = AppleAlert("目录已存在", "该目录已添加，已为你刷新为最近使用。")
+            return
+        }
+        val name = File(path).name.ifBlank { "内部存储" }
+        directoryDao.insert(DirectoryEntity(name = name, treeUri = "", fsPath = path))
+        refreshIssues()
+        _alert.value = AppleAlert("已添加", "“$name”已通过直连方式添加，无需 SAF 授权。")
     }
 
     /**

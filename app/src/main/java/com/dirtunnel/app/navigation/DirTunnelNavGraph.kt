@@ -49,6 +49,7 @@ import com.dirtunnel.core.ui.theme.appleColors
 import com.dirtunnel.core.ui.theme.appleTypography
 import com.dirtunnel.feature.directory.DirectoryListScreen
 import com.dirtunnel.feature.directory.DirectoryViewModel
+import com.dirtunnel.feature.directory.RawDirectoryPickerScreen
 import com.dirtunnel.feature.log.LogScreen
 import com.dirtunnel.feature.service.ServiceEditScreen
 import com.dirtunnel.feature.service.ServiceListScreen
@@ -71,6 +72,7 @@ object Routes {
     const val SERVICE_EDIT = "service_edit/{serviceId}/{directoryId}"
     const val FRP_PROFILE_EDIT = "frp_profile_edit/{profileId}"
     const val TCP_FORWARD_EDIT = "tcp_forward_edit/{forwardId}"
+    const val RAW_PICKER = "raw_directory_picker"
 
     fun serviceList(directoryId: Long) = "service_list/$directoryId"
     fun serviceEdit(serviceId: Long, directoryId: Long) = "service_edit/$serviceId/$directoryId"
@@ -132,7 +134,14 @@ fun DirTunnelNavGraph() {
                         onOpenDirectory = { dirId ->
                             navController.navigate(Routes.serviceList(dirId))
                         },
+                        onOpenRawPicker = { navController.navigate(Routes.RAW_PICKER) },
                         viewModel = vm,
+                    )
+                }
+
+                composable(Routes.RAW_PICKER) {
+                    RawDirectoryPickerScreen(
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(Routes.TUNNEL) {
