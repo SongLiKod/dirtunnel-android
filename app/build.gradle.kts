@@ -14,8 +14,15 @@ android {
         applicationId = "com.dirtunnel.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // ===== 唯一版本源：gradle.properties 的 VERSION_NAME；versionCode 自动计算 =====
+        // 1.2.3 → 1*10000 + 2*100 + 3 = 10203（semver 递增 ⇒ versionCode 严格递增）
+        val verName = providers.gradleProperty("VERSION_NAME").orNull ?: "1.0.0"
+        val verParts = verName.substringBefore('-').split('.')
+        val verCode = (verParts.getOrNull(0)?.toIntOrNull() ?: 0) * 10000 +
+            (verParts.getOrNull(1)?.toIntOrNull() ?: 0) * 100 +
+            (verParts.getOrNull(2)?.toIntOrNull() ?: 0)
+        versionCode = verCode
+        versionName = verName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dirtunnel.core.engine.health.SystemHealthMonitor
 import com.dirtunnel.core.engine.process.BinaryManager
+import com.dirtunnel.core.network.AppUpdater
 import com.dirtunnel.core.network.DdnsUpdater
 import com.dirtunnel.core.storage.data.SettingsStore
 import com.dirtunnel.core.ui.components.AppleAlert
@@ -34,6 +35,7 @@ class SettingViewModel @Inject constructor(
     private val healthMonitor: SystemHealthMonitor,
     private val binaryManager: BinaryManager,
     private val ddnsUpdater: DdnsUpdater,
+    private val appUpdater: AppUpdater,
 ) : ViewModel() {
 
     val settings = settingsStore.settings
@@ -49,6 +51,23 @@ class SettingViewModel @Inject constructor(
     fun setNavBarOpacity(value: Float) {
         viewModelScope.launch { settingsStore.setNavBarOpacity(value) }
     }
+
+    // ===== 软件内更新（检查 → 应用内静默下载 → 系统安装确认） =====
+
+    val updateState: StateFlow<AppUpdater.State> = appUpdater.state
+
+    /** 当前版本（PackageManager 读取，非硬编码）。 */
+    val appVersion: String = appUpdater.currentVersion
+
+    fun checkUpdate() = appUpdater.check()
+
+    fun downloadUpdate() = appUpdater.download()
+
+    fun cancelUpdateDownload() = appUpdater.cancelDownload()
+
+    fun retryUpdate() = appUpdater.retry()
+
+    fun installUpdate() = appUpdater.install()
 
     /** 协议组件 md5 校验结果（TECH 六.6）。 */
     private val _binaries = MutableStateFlow<List<com.dirtunnel.core.engine.model.BinaryStatus>>(emptyList())

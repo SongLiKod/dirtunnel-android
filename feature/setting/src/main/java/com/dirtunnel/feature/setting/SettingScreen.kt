@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dirtunnel.core.network.AppUpdater
 import com.dirtunnel.core.ui.components.AppleAlertDialog
 import com.dirtunnel.core.ui.components.AppleBadge
 import com.dirtunnel.core.ui.components.AppleCell
@@ -389,6 +391,26 @@ fun SettingScreen(
                 }
             }
 
+            // ===== 软件更新（GitHub Releases · 应用内静默下载） =====
+            item {
+                AppleSectionHeader(
+                    "软件更新",
+                    footer = "检查 GitHub Releases；发现新版本后在应用内静默下载（离开本页也不中断），完成后调起系统安装确认，全程不跳转其他应用。",
+                )
+                AppleGroupCard {
+                    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+                    UpdateCell(
+                        state = updateState,
+                        currentVersion = viewModel.appVersion,
+                        onCheck = viewModel::checkUpdate,
+                        onDownload = viewModel::downloadUpdate,
+                        onCancel = viewModel::cancelUpdateDownload,
+                        onInstall = viewModel::installUpdate,
+                        onRetry = viewModel::retryUpdate,
+                    )
+                }
+            }
+
             // ===== 免责声明（README 同步声明） =====
             item {
                 AppleSectionHeader("免责声明")
@@ -491,4 +513,77 @@ fun SettingScreen(
             dismissText = null,
         )
     }
+}
+
+// ===== 软件更新行（检查 → 应用内静默下载 → 系统安装） =====
+
+private fun formatSize(bytes: Long): String =
+    if (bytes <= 0) "" else "%.1f MB".format(bytes / 1024.0 / 1024.0)
+
+@Composable
+private fun UpdateCell(
+    state: AppUpdater.State,
+    currentVersion: String,
+    onCheck: () -> Unit,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onInstall: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    val title: String
+    val subtitle: String
+    val onClick: (() -> Unit)?
+    when (state) {
+        AppUpdater.State.Idle -> {
+            title = "检查更新"
+            subtitle = "当前版本 v$currentVersion"
+            onClick = onCheck
+        }
+        AppUpdater.State.Checking -> {
+            title = "检查更新"
+            subtitle = "正在检查 GitHub Releases…"
+            onClick = null
+        }
+        is AppUpdater.State.UpToDate -> {
+            title = "已是最新版本"
+            subtitle = "当前版本 v${state.version} · 点按重新检查"
+            onClick = onCheck
+        }
+        is AppUpdater.State.Available -> {
+            title = "发现新版本 v${state.version}"
+            subtitle = "点按开始下载并安装" +
+                if (state.sizeBytes > 0) " · ${formatSize(state.sizeBytes)}" else ""
+            onClick = onDownload
+        }
+        is AppUpdater.State.Downloading -> {
+            val pct = if (state.totalBytes > 0 && state.progress >= 0f) {
+                "${(state.progress * 100).toInt()}% · "
+            } else {
+                ""
+            }
+            title = "正在下载 v${state.version}"
+            subtitle = "$pct${formatSize(state.downloadedBytes)} / ${formatSize(state.totalBytes)} · " +
+                "点按取消；离开本页也会继续后台下载"
+            onClick = onCancel
+        }
+        is AppUpdater.State.Ready -> {
+            title = "下载完成 v${state.version}"
+            subtitle = "点按安装（弹出系统安装确认对话框）"
+            onClick = onInstall
+        }
+        is AppUpdater.State.Failed -> {
+            title = "更新失败"
+            subtitle = "${state.message}｜方案：${state.solution} · 点按重试"
+            onClick = onRetry
+        }
+    }
+    AppleCell(
+        title = title,
+        subtitle = subtitle,
+        leadingIcon = Icons.Outlined.SystemUpdate,
+        enabled = state !is AppUpdater.State.Checking,
+        showChevron = onClick != null,
+        showSeparator = false,
+        onClick = onClick,
+    )
 }

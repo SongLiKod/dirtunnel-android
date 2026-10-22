@@ -15,6 +15,7 @@
 | 内网穿透 | 自建 FRP 面板（图形化，不手写 ini）、公共隧道（配置自有 frps 端点，外网地址 + 自动二维码）、IPv6 公网直连（零服务器自动生成可复制地址）、自定义本地 TCP 端口转发 |
 | 安全审计 | IP 白名单、连接/传输日志 + CSV 导出、账号与 frp token 加密存储、敏感配置 0600、二进制 md5 校验 |
 | 保活 | 前台服务常驻 + WakeLock、开机自启、电池优化白名单引导、进程崩溃自动重启 |
+| 软件更新 | 设置内检查 GitHub Releases → 应用内静默下载（离开页面不断）→ 系统安装确认，全程不跳转外部应用 |
 | 监控 | 首页仪表盘：服务状态、在线连接数、实时流量、隧道状态、端口占用告警、权限不足告警 |
 | 主题 | 跟随系统 / 浅色 / 深色三模式，iOS 风格精确色值，悬浮毛玻璃导航（透明度可调） |
 
@@ -37,7 +38,7 @@ feature:setting         主题、保活、电池、通知、脱敏、DDNS、证�
 core:ui                 iOS 风格组件库（AppleFloatingTopBar/AppleGroupList/AppleSwitch/…）+ 主题
 core:engine             二进制托管与 md5 校验、子进程管理、配置生成、端口检测、TCP 代理（白名单/限速/连接数）、健康监测
 core:storage            Room 实体与 DAO、SettingsStore、SecurityStore(加密)、SAF 文档树
-core:network            网络状态监听、二维码生成、公共隧道配置、DDNS 更新
+core:network            网络状态监听、二维码生成、公共隧道配置、DDNS 更新、应用内更新（AppUpdater）
 ```
 
 ## 构建
@@ -47,6 +48,16 @@ export ANDROID_HOME=<sdk>
 export JAVA_HOME=<jdk17>
 ./gradlew assembleDebug     # 输出 app/build/outputs/apk/debug/app-debug.apk
 ```
+
+### 版本号（唯一来源）
+
+版本只在 `gradle.properties` 的 `VERSION_NAME` 一处定义（如 `1.0.0`）：
+
+- `versionName` = `VERSION_NAME`；
+- `versionCode` **自动计算**：`major*10000 + minor*100 + patch`（1.0.0 → 10000，semver 递增 ⇒ 严格递增）；
+- 软件内「检查更新」以 `VERSION_NAME` 与 GitHub Releases 最新 tag 对比。
+
+升级版本只改 `gradle.properties` 一行，App / CI / 更新检查全部自动跟随。
 
 ### CI（GitHub Actions）
 
