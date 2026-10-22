@@ -1,0 +1,2 @@
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+STARTED_FAIL: 未知模式 "bogus"（支持 ftp/http/sftp）

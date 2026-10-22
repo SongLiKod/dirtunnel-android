@@ -1,0 +1,78 @@
+[
+  {
+    "name": "ftpd",
+    "file": "dirtunneld",
+    "version": "1.0.0",
+    "md5": "30abf419d07ebd65a73dcac608aea2d7",
+    "native": true,
+    "abis": ["arm64-v8a"],
+    "protocol": "FTP / FTPS",
+    "source": "DirTunnel dirtunneld（Go c-shared libdirtunneld.so，进程内内置 FTP/FTPS 引擎）"
+  },
+  {
+    "name": "sftp-server",
+    "file": "dirtunneld",
+    "version": "1.0.0",
+    "md5": "30abf419d07ebd65a73dcac608aea2d7",
+    "native": true,
+    "abis": ["arm64-v8a"],
+    "protocol": "SFTP",
+    "source": "DirTunnel dirtunneld（进程内 x/crypto/ssh + pkg/sftp 子系统）"
+  },
+  {
+    "name": "sshd",
+    "file": "dirtunneld",
+    "version": "1.0.0",
+    "md5": "30abf419d07ebd65a73dcac608aea2d7",
+    "native": true,
+    "abis": ["arm64-v8a"],
+    "protocol": "SFTP",
+    "source": "DirTunnel dirtunneld（承载 SFTP 子系统的进程内 SSH 服务端）"
+  },
+  {
+    "name": "minihttpd",
+    "file": "dirtunneld",
+    "version": "1.0.0",
+    "md5": "30abf419d07ebd65a73dcac608aea2d7",
+    "native": true,
+    "abis": ["arm64-v8a"],
+    "protocol": "HTTP / WebDAV",
+    "source": "DirTunnel dirtunneld（进程内 HTTP + WebDAV 引擎）"
+  },
+  {
+    "name": "smbd",
+    "file": "smbd",
+    "version": "1.0.0",
+    "md5": "",
+    "abis": ["arm64-v8a", "armeabi-v7a"],
+    "protocol": "SMB2/3",
+    "source": "samba 静态编译（V1.1，默认禁用 SMB1，正式包内置）"
+  },
+  {
+    "name": "rsync",
+    "file": "rsync",
+    "version": "3.2.7",
+    "md5": "",
+    "abis": ["arm64-v8a", "armeabi-v7a"],
+    "protocol": "Rsync",
+    "source": "rsync 静态编译（V1.2 高阶，正式包内置）"
+  },
+  {
+    "name": "nfsd",
+    "file": "nfs-utils",
+    "version": "2.6.4",
+    "md5": "",
+    "abis": ["arm64-v8a", "armeabi-v7a"],
+    "protocol": "NFS",
+    "source": "nfs-utils 静态编译（V1.2 高阶，正式包内置）"
+  },
+  {
+    "name": "frpc",
+    "file": "frpc",
+    "version": "0.61.1",
+    "md5": "",
+    "abis": ["arm64-v8a", "armeabi-v7a"],
+    "protocol": "FRP 内网穿透客户端",
+    "source": "frp 官方静态二进制（正式包内置）"
+  }
+]

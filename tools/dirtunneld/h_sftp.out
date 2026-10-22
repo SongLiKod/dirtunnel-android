@@ -1,0 +1,7 @@
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+[sftp] ready on 127.0.0.1:12222 root=/data/user/0/com.mobilecoder.ide/cache/tmp/opencode/dtest/root
+STARTED id=1
+STOPPED
+[sftp] ready on 127.0.0.1:12222 root=/data/user/0/com.mobilecoder.ide/cache/tmp/opencode/dtest/root
+RESTARTED id=2
+RESTARTED_STOPPED

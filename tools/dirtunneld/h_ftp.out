@@ -1,0 +1,7 @@
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+[ftp] ready on 127.0.0.1:12121 root=/data/user/0/com.mobilecoder.ide/cache/tmp/opencode/dtest/root tls=false
+STARTED id=1
+STOPPED
+[ftp] ready on 127.0.0.1:12121 root=/data/user/0/com.mobilecoder.ide/cache/tmp/opencode/dtest/root tls=false
+RESTARTED id=2
+RESTARTED_STOPPED

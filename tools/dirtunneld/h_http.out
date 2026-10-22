@@ -1,0 +1,7 @@
+WARNING: linker: Warning: failed to find generated linker configuration from "/linkerconfig/ld.config.txt"
+[http] ready on 127.0.0.1:18080 root=/data/user/0/com.mobilecoder.ide/cache/tmp/opencode/dtest/root dav=true tls=false
+STARTED id=1
+STOPPED
+[http] ready on 127.0.0.1:18080 root=/data/user/0/com.mobilecoder.ide/cache/tmp/opencode/dtest/root dav=true tls=false
+RESTARTED id=2
+RESTARTED_STOPPED
