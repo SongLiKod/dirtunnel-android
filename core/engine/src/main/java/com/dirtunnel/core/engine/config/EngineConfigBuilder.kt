@@ -115,6 +115,7 @@ object EngineConfigBuilder {
             execNative = true,
             nativeMode = "ftp",
             nativeConfigName = cfg.name,
+            nativeLogPath = File(configDir, "server.log").path,
         )
     }
 
@@ -261,6 +262,7 @@ object EngineConfigBuilder {
             execNative = true,
             nativeMode = "http",
             nativeConfigName = cfg.name,
+            nativeLogPath = File(configDir, "access.log").path,
         )
     }
 

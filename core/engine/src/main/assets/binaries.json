@@ -3,7 +3,7 @@
     "name": "ftpd",
     "file": "dirtunneld",
     "version": "1.0.0",
-    "md5": "30abf419d07ebd65a73dcac608aea2d7",
+    "md5": "94b13c6cb0f897ca17ffdb5aa56e066e",
     "native": true,
     "abis": ["arm64-v8a"],
     "protocol": "FTP / FTPS",
@@ -13,7 +13,7 @@
     "name": "sftp-server",
     "file": "dirtunneld",
     "version": "1.0.0",
-    "md5": "30abf419d07ebd65a73dcac608aea2d7",
+    "md5": "94b13c6cb0f897ca17ffdb5aa56e066e",
     "native": true,
     "abis": ["arm64-v8a"],
     "protocol": "SFTP",
@@ -23,7 +23,7 @@
     "name": "sshd",
     "file": "dirtunneld",
     "version": "1.0.0",
-    "md5": "30abf419d07ebd65a73dcac608aea2d7",
+    "md5": "94b13c6cb0f897ca17ffdb5aa56e066e",
     "native": true,
     "abis": ["arm64-v8a"],
     "protocol": "SFTP",
@@ -33,7 +33,7 @@
     "name": "minihttpd",
     "file": "dirtunneld",
     "version": "1.0.0",
-    "md5": "30abf419d07ebd65a73dcac608aea2d7",
+    "md5": "94b13c6cb0f897ca17ffdb5aa56e066e",
     "native": true,
     "abis": ["arm64-v8a"],
     "protocol": "HTTP / WebDAV",
@@ -68,11 +68,12 @@
   },
   {
     "name": "frpc",
-    "file": "frpc",
-    "version": "0.61.1",
-    "md5": "",
-    "abis": ["arm64-v8a", "armeabi-v7a"],
+    "file": "dirtunneld",
+    "version": "0.61.0",
+    "md5": "94b13c6cb0f897ca17ffdb5aa56e066e",
+    "native": true,
+    "abis": ["arm64-v8a"],
     "protocol": "FRP 内网穿透客户端",
-    "source": "frp 官方静态二进制（正式包内置）"
+    "source": "DirTunnel dirtunneld（进程内集成 frp v0.61 官方 client 库，同因 W^X 不可 exec）"
   }
 ]

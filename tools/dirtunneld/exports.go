@@ -38,8 +38,10 @@ func StartServer(mode, cfgPath *C.char) C.int {
 			err = runHTTP(p, ready)
 		case "sftp":
 			err = runSFTP(p, ready)
+		case "frpc":
+			err = runFRP(p, ready)
 		default:
-			err = fmt.Errorf("未知模式 %q（支持 ftp/http/sftp）", m)
+			err = fmt.Errorf("未知模式 %q（支持 ftp/http/sftp/frpc）", m)
 		}
 		if err != nil {
 			setErr(err)

@@ -31,6 +31,7 @@ android {
 dependencies {
     implementation(project(":core:ui"))
     implementation(project(":core:storage"))
+    implementation(project(":core:engine"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.lifecycle.runtime.compose)

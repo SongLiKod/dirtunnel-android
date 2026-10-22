@@ -44,6 +44,22 @@
 > （`-tags !cshared`）供容器内回归冒烟。V1.1+ 的 smbd/rsync/nfsd/frpc 为外部
 > 项目二进制，落地时按同一 W^X 约束选形态。
 
+> **V1.1 偏差记录（2026-10-22）——frpc 子进程 → 进程内（同一 W^X 约束）**：
+> frpc 与 dirtunneld 面对完全相同的 SELinux W^X 限制，子进程形态在 Android 10+
+> 必然 `error=13`，故将 frp **官方 client 库**（`github.com/fatedier/frp v0.61.0`）
+> 作为 Go 依赖编入 `libdirtunneld.so`，新增引擎模式 `frpc`
+> （`tools/dirtunneld/frp.go`，`config.LoadClientConfig` 直读 Kotlin 生成的
+> frpc TOML，零格式转换）。`binaries.json` 中 frpc 条目改为 native（同一 .so）。
+> 连带决策：①frp v0.61 客户端日志已不再打印服务器分配端口，隧道远端端口改经
+> frp 本地 admin API（`webServer`，仅绑 127.0.0.1，App 每次启动扫描全新空闲口）
+> `/api/status` 轮询 `remote_addr` 发现；②frp 上游 `Service.Run` 停止时不关闭
+> webServer 监听（进程退出才回收）——进程内形态下每次启停泄漏一个监听口，
+> 以 2 万口扫描范围（17300..37299）稀释，后续可改为经 `StatusExporter()`
+> 进程内直查、彻底不开端口；③代价：.so 由 6.9MB 增至 15.1MB（含 quic-go/
+> kcp-go 等传输依赖），后续可裁剪未用传输层瘦身。
+> 容器 E2E：frps + frpc 模式 + 动态端口全链路 401/200、dlopen 双轮重启全过
+> （`dtest/test_c2.sh`、`dtest/test_d.sh`）。
+
 ## 三、权限清单（TECH 三）
 
 全部声明于 `app/src/main/AndroidManifest.xml`：
@@ -123,7 +139,9 @@
 - 一键启动/停止/重启/查看状态：`ServiceListScreen` 操作按钮 + `ServiceRuntimeController`（start/stop/restart/status）。
 
 ### 4.3 内网穿透
-1. 公共隧道：一键开启 → 生成外网地址 + 二维码：`PublicTunnelConfigProvider`（内置端点 + 可远端刷新 JSON）+ `TunnelViewModel` + `QrDialog`（`core/network/QrCodeEncoder.kt`）。
+1. 公共隧道：一键开启 → 生成外网地址 + 二维码：`PublicTunnelConfigProvider`（可远端刷新 JSON）+ `TunnelViewModel` + `QrDialog`（`core/network/QrCodeEncoder.kt`）。
+   - **偏差（真机阶段修正）**：原默认端点 `pub.dirtunnel.app` 并非真实域名，已移除——公共隧道默认「未配置」，启动前置校验并附方案提示（配置自有 frps / 自建 FRP 档案 / IPv6 直连）；端点在隧道页「公共隧道服务器」图形化配置，token 落加密存储。
+   - **IPv6 公网直连（真实可用的零配置方案）**：`core/engine/network/GlobalIpv6.kt` 检测全局单播 IPv6（2000::/3），隧道页卡片对运行中服务自动生成 `scheme://[v6]:port` 可复制地址——不依赖任何服务器；要求访问端同样支持 IPv6。
 2. 自建 FRP：服务器/端口/token 图形化表单（`FrpProfileEditScreen.kt`），`FrpcConfigBuilder` 生成 ini，不手写。
 - TCP 兼容所有内置协议 + 用户自定义端口：`ProxyConfig`/`TcpForwardEditScreen`。
 
@@ -136,6 +154,8 @@
 
 ### 4.5 UI 主题
 三模式（跟随系统/浅色/深色）：见 TECH 四主题模式实现。
+- 底部毛玻璃导航栏不透明度可在 设置 → 外观 滑杆调节（`AppleSlider` 自研组件、`ShellViewModel`、`SettingsStore.navBarOpacity`）；
+- 目录左滑删除采用素色滑出背景 + 红色「删除」字样（不用整块红底）。
 
 ### 4.6 监控 · 首页仪表盘
 `app/dashboard/DashboardScreen.kt` + `DashboardViewModel.kt`：
@@ -194,6 +214,9 @@
 
 ## 发布前遗留（占位项）
 
-- [ ] `core/engine/src/main/assets/binaries.json` md5 全为空，需补齐真实二进制（frpc、portable ftpd、sftp-server、minihttpd、smbd、rsync、nfsd）与 md5；
+- [x] `binaries.json`：dirtunneld（libdirtunneld.so）ftp/sftp/sshd/minihttpd/frpc 五条 native 条目已带真实 md5（`94b13c6c…`）；frpc 已进程内化不再需要独立二进制；
+- [ ] **公共隧道真实端点**：不存在免费可靠的公共服务；一键公网需运营方一台真实 frps（用户自配端点已支持）。替代真·零配置方案：IPv6 直连卡片已落地；
+- [ ] smbd/rsync/nfsd 真实二进制与 md5（注意：同样受 W^X 约束，落地需进程内化或改经可 exec 路径）；
 - [ ] release 签名、AAB 输出、abi 分包；
-- [ ] 真机 72h 保活压测、APK 体积优化至 ≤15MB。
+- [ ] 真机 72h 保活压测；
+- [ ] APK 体积：frp 入库后 .so 达 15.1MB、debug APK 25.9MB，需裁剪未用 frp 传输层（quic-go/kcp-go）或分包策略达成 ≤15MB 目标。

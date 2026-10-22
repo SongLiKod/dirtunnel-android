@@ -5,7 +5,7 @@ import android.os.PowerManager
 import com.dirtunnel.core.engine.model.ConfigFile
 import com.dirtunnel.core.engine.model.ProcessSpec
 import com.dirtunnel.core.engine.model.ProcessState
-import com.dirtunnel.core.engine.process.BinaryManager
+import com.dirtunnel.core.engine.process.PortChecker
 import com.dirtunnel.core.engine.process.ProcessSupervisor
 import com.dirtunnel.core.network.PublicTunnelConfigProvider
 import com.dirtunnel.core.network.DdnsUpdater
@@ -20,12 +20,14 @@ import com.dirtunnel.core.storage.entity.ConnectionLogEntity
 import com.dirtunnel.core.storage.model.PROFILE_PUBLIC
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +36,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 /** 启动隧道结果（失败必带解决方案）。 */
 sealed interface TunnelResult {
@@ -77,7 +80,6 @@ class TunnelRuntimeController @Inject constructor(
     private val security: SecurityStore,
     private val settingsStore: SettingsStore,
     private val supervisor: ProcessSupervisor,
-    private val binaryManager: BinaryManager,
     private val publicTunnelProvider: PublicTunnelConfigProvider,
     private val ddnsUpdater: DdnsUpdater,
 ) {
@@ -92,6 +94,7 @@ class TunnelRuntimeController @Inject constructor(
 
     private val logJobs = mutableMapOf<Long, Job>()
     private val stateJobs = mutableMapOf<Long, Job>()
+    private val remoteJobs = mutableMapOf<Long, Job>()
     private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile private var autoRestartCache = true
@@ -146,12 +149,7 @@ class TunnelRuntimeController @Inject constructor(
             )
         }
 
-        // 二进制
-        binaryManager.ensureForProtocol("frpc")?.let { msg ->
-            return TunnelResult.Failure("FRP 客户端组件不可用", msg)
-        }
-        val frpc = binaryManager.executableFile("frpc")
-            ?: return TunnelResult.Failure("FRP 客户端组件缺失", "方案：设置 → 协议组件 → 恢复默认组件。")
+        // frp 客户端已进程内化（libdirtunneld.so 的 frpc 模式；同因 SELinux W^X 不可 exec 子进程）
 
         // 端点与 token
         val label: String
@@ -191,6 +189,10 @@ class TunnelRuntimeController @Inject constructor(
         configDir.mkdirs()
         val logFile = File(configDir, "frpc.log")
         val cfgFile = File(configDir, "frpc.toml")
+        // frp v0.61+：客户端日志不再打印分配端口 → 开本地 admin API 供查询（仅回环可达）。
+        // 每次启动扫描全新空闲口：frp 停止时上游不释放 webServer 监听（进程退出才回收），
+        // 复用旧口会 bind 失败；宽范围（2 万口）保证进程生命周期内永不耗尽。
+        val adminPort = (17300..37299).firstOrNull { PortChecker.isAvailable(it) } ?: 17300
         val content = FrpcConfigBuilder.build(
             serverAddr = serverAddr,
             serverPort = serverPort,
@@ -198,6 +200,7 @@ class TunnelRuntimeController @Inject constructor(
             useTls = useTls,
             proxies = proxies,
             logFile = logFile.path,
+            adminPort = adminPort,
         )
 
         val serverDisplay = "$serverAddr:$serverPort"
@@ -215,11 +218,15 @@ class TunnelRuntimeController @Inject constructor(
         val spec = ProcessSpec(
             key = tunnelKey(profileId),
             displayLabel = "$label ($serverDisplay)",
-            binaryPath = frpc.path,
-            args = listOf("-c", cfgFile.path),
+            binaryPath = "libdirtunneld.so (frpc 进程内)",
+            args = emptyList(),
             workDir = configDir.path,
             configFiles = listOf(ConfigFile(cfgFile.name, content)),
             readyPort = 0,
+            execNative = true,
+            nativeMode = "frpc",
+            nativeConfigName = cfgFile.name,
+            nativeLogPath = logFile.path,
         )
 
         val started = supervisor.start(
@@ -257,6 +264,10 @@ class TunnelRuntimeController @Inject constructor(
             }
         }
 
+        // 远端端口轮询（frp admin API：status=running 且 remote_addr 带端口即更新展示）
+        remoteJobs[profileId]?.cancel()
+        remoteJobs[profileId] = scope.launch { pollRemotePorts(profileId, adminPort) }
+
         // 日志解析：login 成功 / 远端端口 / 错误
         logJobs[profileId]?.cancel()
         logJobs[profileId] = scope.launch {
@@ -291,6 +302,56 @@ class TunnelRuntimeController @Inject constructor(
         return ok
     }
 
+    /**
+     * 远端端口发现（frp v0.61+）：客户端日志已不打印分配端口，
+     * 轮询本地 admin API `/api/status`（仅 127.0.0.1 可达），running 即取 remote_addr 端口。
+     */
+    private suspend fun pollRemotePorts(profileId: Long, adminPort: Int) {
+        while (true) {
+            val json = try {
+                URL("http://127.0.0.1:$adminPort/api/status")
+                    .openConnection()
+                    .apply {
+                        connectTimeout = 1_500
+                        readTimeout = 1_500
+                    }
+                    .getInputStream()
+                    .bufferedReader().use { it.readText() }
+            } catch (_: Throwable) {
+                null
+            }
+            if (json != null) {
+                try {
+                    val root = JSONObject(json)
+                    // frp 按代理类型分组（tcp/udp/xtcp…），遍历全部分组取 name/status/remote_addr
+                    val keys = buildList { root.keys().forEach { add(it) } }
+                    for (key in keys) {
+                        val arr = root.optJSONArray(key) ?: continue
+                        for (i in 0 until arr.length()) {
+                            val o = arr.getJSONObject(i)
+                            val name = o.optString("name")
+                            val status = o.optString("status")
+                            val port = o.optString("remote_addr")
+                                .substringAfterLast(':').toIntOrNull() ?: 0
+                            if (status == "running" && port > 0) {
+                                updateRuntime(profileId) { rt ->
+                                    rt.copy(
+                                        connected = true,
+                                        proxies = rt.proxies.map { p ->
+                                            if (p.name == name) p.copy(remotePort = port) else p
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+            delay(2_000)
+        }
+    }
+
     private fun onConnected(profileId: Long, label: String, server: String) {
         val was = _runtimes.value[profileId]?.connected == true
         updateRuntime(profileId) { it.copy(connected = true, lastError = null) }
@@ -321,6 +382,7 @@ class TunnelRuntimeController @Inject constructor(
     fun stop(profileId: Long) {
         logJobs[profileId]?.cancel()
         stateJobs[profileId]?.cancel()
+        remoteJobs[profileId]?.cancel()
         supervisor.stop(tunnelKey(profileId))
         val rt = _runtimes.value[profileId]
         if (rt?.connected == true) {

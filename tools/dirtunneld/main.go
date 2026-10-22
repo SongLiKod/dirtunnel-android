@@ -38,6 +38,8 @@ func main() {
 		err = runHTTP(cfg, nil)
 	case "sftp":
 		err = runSFTP(cfg, nil)
+	case "frpc":
+		err = runFRP(cfg, nil)
 	default:
 		err = fmt.Errorf("未知模式 %q（支持 ftp/http/sftp）", mode)
 	}

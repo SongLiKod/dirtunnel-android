@@ -47,7 +47,9 @@ fun AppleScreen(
 
     val topBarHeight = if (subtitle != null) 58.dp else 52.dp
     val topPadding = statusBarTop + 8.dp + topBarHeight + 12.dp
-    val bottomPadding = if (hasBottomBar) 56.dp + navBottom + 12.dp else navBottom + 16.dp
+    // 悬浮主 TabBar 空间（LocalMainTabBarSpace）计入底部，避免列表末项被底栏遮挡
+    val mainTabBarSpace = LocalMainTabBarSpace.current
+    val bottomPadding = (if (hasBottomBar) 56.dp + 12.dp else 16.dp) + navBottom + mainTabBarSpace
 
     val scrollOffset by remember(listState) {
         derivedStateOf {

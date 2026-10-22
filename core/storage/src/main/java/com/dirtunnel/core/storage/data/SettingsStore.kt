@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -37,6 +38,8 @@ data class AppSettings(
     val ddnsDomain: String = "",
     val ddnsRecord: String = "",
     val customCertPath: String = "",
+    /** 底部导航栏背景不透明度（0=全透明，1=完全不透明）。 */
+    val navBarOpacity: Float = 0.9f,
 )
 
 /**
@@ -65,6 +68,7 @@ class SettingsStore @Inject constructor(
         val DDNS_RECORD = stringPreferencesKey("ddns_record")
         val CERT_PATH = stringPreferencesKey("custom_cert_path")
         val LAST_DDNS_UPDATE = longPreferencesKey("last_ddns_update")
+        val NAV_OPACITY = floatPreferencesKey("nav_bar_opacity")
     }
 
     val settings: Flow<AppSettings> = dataStore.data.map { p ->
@@ -85,6 +89,7 @@ class SettingsStore @Inject constructor(
             ddnsDomain = p[Keys.DDNS_DOMAIN] ?: "",
             ddnsRecord = p[Keys.DDNS_RECORD] ?: "",
             customCertPath = p[Keys.CERT_PATH] ?: "",
+            navBarOpacity = p[Keys.NAV_OPACITY] ?: 0.9f,
         )
     }
 
@@ -101,6 +106,9 @@ class SettingsStore @Inject constructor(
     suspend fun setRecordSecretsInLog(value: Boolean) = dataStore.edit { it[Keys.RECORD_SECRETS] = value }
     suspend fun setAdvancedFeaturesVisible(value: Boolean) = dataStore.edit { it[Keys.ADVANCED] = value }
     suspend fun setBootAutoStart(value: Boolean) = dataStore.edit { it[Keys.BOOT_AUTO_START] = value }
+    suspend fun setNavBarOpacity(value: Float) = dataStore.edit {
+        it[Keys.NAV_OPACITY] = value.coerceIn(0.3f, 1f)
+    }
 
     suspend fun setPublicTunnelServer(server: String, port: Int) = dataStore.edit {
         it[Keys.PUBLIC_SERVER] = server

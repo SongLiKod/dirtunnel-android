@@ -3,6 +3,9 @@ package com.dirtunnel.feature.tunnel
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dirtunnel.core.engine.model.ProcessState
+import com.dirtunnel.core.engine.network.GlobalIpv6
+import com.dirtunnel.core.engine.process.ProcessSupervisor
 import com.dirtunnel.core.network.PublicTunnelConfigProvider
 import com.dirtunnel.core.network.PublicTunnelEndpoint
 import com.dirtunnel.core.network.QrCodeEncoder
@@ -19,10 +22,12 @@ import com.dirtunnel.feature.tunnel.runtime.TunnelRuntime
 import com.dirtunnel.feature.tunnel.runtime.TunnelRuntimeController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -46,6 +51,7 @@ class TunnelViewModel @Inject constructor(
     private val security: SecurityStore,
     private val publicTunnelProvider: PublicTunnelConfigProvider,
     private val runtime: TunnelRuntimeController,
+    private val supervisor: ProcessSupervisor,
 ) : ViewModel() {
 
     val runtimes: StateFlow<Map<Long, TunnelRuntime>> = runtime.runtimes
@@ -61,6 +67,27 @@ class TunnelViewModel @Inject constructor(
         .map { list -> list.count { it.enableTunnel } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
+    // ==================== IPv6 公网直连（零服务器真实可用） ====================
+
+    private val _ipv6Addresses = MutableStateFlow<List<String>>(emptyList())
+    val ipv6Addresses: StateFlow<List<String>> = _ipv6Addresses.asStateFlow()
+
+    fun refreshIpv6() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _ipv6Addresses.value = GlobalIpv6.addresses()
+        }
+    }
+
+    /** 运行中服务（名称/协议/端口）——用于生成直连公网地址。 */
+    data class RunningService(val name: String, val protocol: String, val port: Int)
+
+    val runningServices: StateFlow<List<RunningService>> =
+        combine(serviceDao.observeAll(), supervisor.states) { services, states ->
+            services
+                .filter { states["service_${it.id}"] is ProcessState.Running }
+                .map { RunningService(it.name, it.protocol, it.port) }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     private val _endpoint = MutableStateFlow<PublicTunnelEndpoint?>(null)
     val endpoint: StateFlow<PublicTunnelEndpoint?> = _endpoint.asStateFlow()
 
@@ -73,9 +100,66 @@ class TunnelViewModel @Inject constructor(
     private val _busyProfileId = MutableStateFlow<Long?>(null)
     val busyProfileId: StateFlow<Long?> = _busyProfileId.asStateFlow()
 
+    /** 公共隧道服务器编辑器（域名/IP、端口、token、外网 host）。 */
+    data class EndpointEditor(val server: String, val port: String, val token: String, val host: String)
+
+    private val _endpointEditor = MutableStateFlow<EndpointEditor?>(null)
+    val endpointEditor: StateFlow<EndpointEditor?> = _endpointEditor.asStateFlow()
+
+    fun openEndpointEditor() {
+        viewModelScope.launch {
+            val ep = publicTunnelProvider.endpoint()
+            _endpointEditor.value = EndpointEditor(
+                server = ep.serverAddr,
+                port = ep.serverPort.toString(),
+                token = security.frpToken(PROFILE_PUBLIC) ?: "",
+                host = ep.hostForUrl,
+            )
+        }
+    }
+
+    fun closeEndpointEditor() {
+        _endpointEditor.value = null
+    }
+
+    fun saveEndpointEditor(server: String, port: String, token: String, host: String) {
+        viewModelScope.launch {
+            val srv = server.trim()
+            val portNum = port.trim().toIntOrNull() ?: 0
+            if (srv.isBlank() || portNum !in 1..65535) {
+                _alert.value = AppleAlert("服务器配置无效", "方案：填写服务器域名/IP 与 1~65535 的端口号。")
+                return@launch
+            }
+            publicTunnelProvider.configure(
+                srv,
+                portNum,
+                token.trim().ifBlank { null },
+                host.trim().ifBlank { null },
+            )
+            _endpoint.value = publicTunnelProvider.endpoint()
+            _endpointEditor.value = null
+            _alert.value = AppleAlert("已保存", "公共隧道端点已更新为 $srv:$portNum，重新启动隧道生效。")
+        }
+    }
+
     init {
         viewModelScope.launch { _endpoint.value = publicTunnelProvider.endpoint() }
+        refreshIpv6()
+        // 公共隧道首个远端端口分配成功后自动生成二维码（REQ 4.3.1 一键出可连接地址）
+        viewModelScope.launch {
+            runtimes.collect { map ->
+                val rt = map[PROFILE_PUBLIC] ?: return@collect
+                val mapped = rt.proxies.count { (it.remotePort ?: 0) > 0 }
+                if (autoQrPending && rt.connected && mapped > 0) {
+                    autoQrPending = false
+                    showQr(PROFILE_PUBLIC)
+                }
+            }
+        }
     }
+
+    /** 公共隧道已启动、尚未拿到端口：拿到首个端口时自动弹二维码（每个启动周期一次）。 */
+    private var autoQrPending = false
 
     // ==================== 启停 ====================
 
@@ -83,6 +167,16 @@ class TunnelViewModel @Inject constructor(
 
     fun startProfile(profileId: Long) {
         viewModelScope.launch {
+            if (profileId == PROFILE_PUBLIC &&
+                publicTunnelProvider.endpoint().serverAddr.isBlank()
+            ) {
+                _alert.value = AppleAlert(
+                    "未配置公网中转服务器",
+                    "公网中转必须有一台可联网的 frps 服务器（不存在免费可靠公共服务）。方案：①点击下方「公共隧道服务器」填入自有 frps 的地址/token；②或使用「公网直连(IPv6)」零配置卡片（访问端也需支持 IPv6）；③或以自建 FRP 档案连接你的 frps。",
+                )
+                return@launch
+            }
+            if (profileId == PROFILE_PUBLIC) autoQrPending = true
             _busyProfileId.value = profileId
             when (val r = runtime.start(profileId)) {
                 is TunnelResult.Success -> _endpoint.value = publicTunnelProvider.endpoint()
@@ -93,6 +187,7 @@ class TunnelViewModel @Inject constructor(
     }
 
     fun stopProfile(profileId: Long) {
+        autoQrPending = false
         viewModelScope.launch { runtime.stop(profileId) }
     }
 
@@ -108,7 +203,9 @@ class TunnelViewModel @Inject constructor(
             if (content == null) {
                 _alert.value = AppleAlert(
                     title = "暂无外网地址",
-                    message = "方案：先启动隧道，等待 frpc 连接成功并分配远端端口后再生成二维码。",
+                    message = "隧道已启动但尚未获得远端端口。方案：①确认与 frps 服务器网络连通、token 正确；" +
+                        "②内置公共服务器不可用时，请在设置中配置自有 frps 或使用自建 FRP 档案；" +
+                        "③端口分配通常需 2~5 秒，稍候后重试。",
                 )
                 return@launch
             }

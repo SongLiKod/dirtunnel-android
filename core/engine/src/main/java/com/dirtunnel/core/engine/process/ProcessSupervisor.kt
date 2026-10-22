@@ -34,6 +34,12 @@ class ProcessSupervisor @Inject constructor() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val processes = ConcurrentHashMap<String, SupervisedProcess>()
 
+    private val _states = MutableStateFlow<Map<String, ProcessState>>(emptyMap())
+    /** 所有受管进程的实时状态快照（key → state），供目录/仪表盘聚合运行数。 */
+    val states: StateFlow<Map<String, ProcessState>> = _states.asStateFlow()
+
+    private val watched = ConcurrentHashMap<SupervisedProcess, Boolean>()
+
     fun get(key: String): SupervisedProcess? = processes[key]
 
     fun all(): List<SupervisedProcess> = processes.values.toList()
@@ -57,9 +63,21 @@ class ProcessSupervisor @Inject constructor() {
             existing
         } else {
             existing?.stopGraceful(graceMs = 1_500)
-            SupervisedProcess(spec, autoRestartProvider, onExit).also { processes[spec.key] = it }
+            SupervisedProcess(spec, autoRestartProvider, onExit)
+                .also { processes[spec.key] = it }
+                .also { watchState(it) }
         }
         return proc.start()
+    }
+
+    /** 将单进程状态汇入全局快照（每个实例仅注册一次）。 */
+    private fun watchState(proc: SupervisedProcess) {
+        if (watched.putIfAbsent(proc, true) != null) return
+        scope.launch {
+            proc.state.collect { st ->
+                _states.value = _states.value + (proc.spec.key to st)
+            }
+        }
     }
 
     fun stop(key: String, graceMs: Long = 3_000) {
@@ -73,6 +91,7 @@ class ProcessSupervisor @Inject constructor() {
     fun remove(key: String) {
         processes[key]?.stopGraceful(0)
         processes.remove(key)
+        _states.value = _states.value - key
     }
 }
 
@@ -104,6 +123,7 @@ class SupervisedProcess internal constructor(
 
     @Volatile
     private var nativeMonitorJob: Job? = null
+    private var nativeLogJob: Job? = null
 
     @Volatile
     var stopRequested: Boolean = false
@@ -236,8 +256,36 @@ class SupervisedProcess internal constructor(
         restartAttempt = 0
         _state.value = ProcessState.Running(android.os.Process.myPid().toLong(), startedAt)
         appendLog("[DirTunnel] 已启动(进程内) ${spec.displayLabel} mode=${spec.nativeMode} 端口=${spec.readyPort}")
+        startNativeLogTail()
         startNativeMonitor()
         return true
+    }
+
+    /** 进程内引擎日志尾随（frpc 等经文件日志输出登录/端口信息，宿主解析需要）。 */
+    private fun startNativeLogTail() {
+        val path = spec.nativeLogPath ?: return
+        nativeLogJob?.cancel()
+        nativeLogJob = scope.launch(Dispatchers.IO) {
+            var offset = 0L
+            val file = File(path)
+            while (isActive && !stopRequested && nativeHandle > 0) {
+                try {
+                    if (file.exists() && file.length() > offset) {
+                        java.io.RandomAccessFile(file, "r").use { raf ->
+                            raf.seek(offset)
+                            var line = raf.readLine()
+                            while (line != null) {
+                                _logs.tryEmit(line)
+                                line = raf.readLine()
+                            }
+                            offset = raf.filePointer
+                        }
+                    }
+                } catch (_: Throwable) {
+                }
+                delay(700)
+            }
+        }
     }
 
     /**
@@ -248,6 +296,8 @@ class SupervisedProcess internal constructor(
         nativeMonitorJob?.cancel()
         val port = spec.readyPort
         nativeMonitorJob = scope.launch(Dispatchers.IO) {
+            // 无内部端口（如 frpc 隧道）：进程内引擎与宿主进程同生，无端口可盯，不做健康监视
+            if (port <= 0) return@launch
             var misses = 0
             while (isActive && !stopRequested && nativeHandle > 0) {
                 delay(4_000)
@@ -318,6 +368,8 @@ class SupervisedProcess internal constructor(
         val h = nativeHandle
         nativeMonitorJob?.cancel()
         nativeMonitorJob = null
+        nativeLogJob?.cancel()
+        nativeLogJob = null
         if (h <= 0) {
             _state.value = ProcessState.Stopped
             return
@@ -342,6 +394,8 @@ class SupervisedProcess internal constructor(
         restartJob?.cancel()
         nativeMonitorJob?.cancel()
         nativeMonitorJob = null
+        nativeLogJob?.cancel()
+        nativeLogJob = null
         if (spec.execNative) {
             val h = nativeHandle
             nativeHandle = -1

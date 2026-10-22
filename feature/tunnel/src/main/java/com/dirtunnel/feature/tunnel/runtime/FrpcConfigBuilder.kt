@@ -22,6 +22,7 @@ object FrpcConfigBuilder {
         useTls: Boolean,
         proxies: List<FrpcProxy>,
         logFile: String,
+        adminPort: Int = 0,
     ): String = buildString {
         appendLine("# DirTunnel 自动生成 frpc 配置（无需手写 ini）")
         appendLine("serverAddr = \"$serverAddr\"")
@@ -32,6 +33,11 @@ object FrpcConfigBuilder {
         appendLine("log.to = \"$logFile\"")
         appendLine("log.level = \"info\"")
         appendLine("loginFailExit = false")
+        if (adminPort > 0) {
+            // frp v0.61 起客户端日志不再打印分配端口：开本地 admin API 供宿主查询（仅回环可达）
+            appendLine("webServer.addr = \"127.0.0.1\"")
+            appendLine("webServer.port = $adminPort")
+        }
         appendLine("")
         proxies.forEach { p ->
             appendLine("[[proxies]]")

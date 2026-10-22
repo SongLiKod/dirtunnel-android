@@ -55,6 +55,8 @@ data class ProcessSpec(
     val nativeMode: String = "",
     /** native 引擎读取的配置文件名（相对 workDir，由 configFiles 按 0600 写入） */
     val nativeConfigName: String = "",
+    /** native 引擎日志文件（宿主 tail 进运行日志，如 frpc 的 log.to） */
+    val nativeLogPath: String? = null,
 )
 
 /** 子进程生命周期状态。 */

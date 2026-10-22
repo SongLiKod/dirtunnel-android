@@ -2,6 +2,7 @@ package com.dirtunnel.feature.setting
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,11 +19,13 @@ import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -45,6 +48,7 @@ import com.dirtunnel.core.ui.components.AppleTextField
 import com.dirtunnel.core.ui.components.rememberHazeState
 import com.dirtunnel.core.ui.theme.ThemeMode
 import com.dirtunnel.core.ui.theme.appleColors
+import com.dirtunnel.core.ui.components.AppleSlider
 import com.dirtunnel.core.ui.theme.appleTypography
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -73,6 +77,9 @@ fun SettingScreen(
     val ddnsBusy by viewModel.ddnsBusy.collectAsStateWithLifecycle()
     val lastDdns by viewModel.lastDdnsUpdate.collectAsStateWithLifecycle()
 
+    var navOpacityLocal by remember { mutableStateOf(settings.navBarOpacity) }
+    LaunchedEffect(settings.navBarOpacity) { navOpacityLocal = settings.navBarOpacity }
+
     var showThemeSheet by remember { mutableStateOf(false) }
     var showDdnsProviderSheet by remember { mutableStateOf(false) }
     var showPublicServerDialog by remember { mutableStateOf(false) }
@@ -96,7 +103,7 @@ fun SettingScreen(
         ) {
             // ===== 主题（REQ 4.5） =====
             item {
-                AppleSectionHeader("外观", footer = "支持跟随系统 / 浅色 / 深色三种模式。")
+                AppleSectionHeader("外观", footer = "支持跟随系统 / 浅色 / 深色三种模式；可调节底部导航栏不透明度。")
                 AppleGroupCard {
                     AppleCell(
                         title = "主题模式",
@@ -106,6 +113,36 @@ fun SettingScreen(
                         showSeparator = false,
                         onClick = { showThemeSheet = true },
                     )
+                }
+                Spacer(Modifier.height(10.dp))
+                AppleGroupCard {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AppleText(
+                                "导航栏不透明度",
+                                style = typography.headline,
+                                color = colors.textPrimary,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            AppleText(
+                                "${(navOpacityLocal * 100).toInt()}%",
+                                style = typography.callout,
+                                color = colors.textSecondary,
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        AppleSlider(
+                            value = navOpacityLocal,
+                            onValueChange = { navOpacityLocal = it },
+                            valueRange = 0.3f..1f,
+                            onValueChangeFinished = { viewModel.setNavBarOpacity(navOpacityLocal) },
+                        )
+                        AppleText(
+                            "导航栏底色自动跟随主题背景色；越低越透明，越高文字越清晰。",
+                            style = typography.caption,
+                            color = colors.textSecondary,
+                        )
+                    }
                 }
             }
 

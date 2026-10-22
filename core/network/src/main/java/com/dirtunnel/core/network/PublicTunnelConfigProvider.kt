@@ -21,7 +21,7 @@ data class PublicTunnelEndpoint(
     val token: String,
     /** 生成外网访问地址使用的域名/IP */
     val hostForUrl: String,
-    /** 配置来源：默认内置 / 手动配置 / 远端下发 */
+    /** 配置来源：未配置 / 手动配置 / 远端下发 */
     val source: String,
 )
 
@@ -40,20 +40,16 @@ class PublicTunnelConfigProvider @Inject constructor(
 ) {
     suspend fun endpoint(): PublicTunnelEndpoint {
         val s = settings.settings.first()
-        val manual = s.publicTunnelServer.isNotBlank()
-        val serverAddr = s.publicTunnelServer.ifBlank { DEFAULT_SERVER }
+        val serverAddr = s.publicTunnelServer.trim()
         val serverPort = if (s.publicTunnelPort in 1..65535) s.publicTunnelPort else DEFAULT_PORT
-        val token = security.frpToken(PROFILE_PUBLIC) ?: DEFAULT_TOKEN
-        val host = s.publicTunnelHost.ifBlank { DEFAULT_HOST.ifBlank { serverAddr } }
+        val token = security.frpToken(PROFILE_PUBLIC) ?: ""
+        val host = s.publicTunnelHost.trim().ifBlank { serverAddr }
         return PublicTunnelEndpoint(
             serverAddr = serverAddr,
             serverPort = serverPort,
             token = token,
             hostForUrl = host,
-            source = when {
-                manual -> "手动配置"
-                else -> "默认内置"
-            },
+            source = if (serverAddr.isBlank()) "未配置" else "手动配置",
         )
     }
 
@@ -99,10 +95,11 @@ class PublicTunnelConfigProvider @Inject constructor(
     fun qrContent(host: String, remotePort: Int): String = formatAddress(host, remotePort)
 
     companion object {
-        // 内置公共隧道默认端点（可被设置覆盖 / 远端 JSON 下发）
-        const val DEFAULT_SERVER = "pub.dirtunnel.app"
+        // 无内置公共服务器：可靠的一键公网必须由运营方提供真实 frps 端点，
+        // 不存在免费可靠的公共服务。未配置时 UI 引导：自有 frps / IPv6 直连 / 自建档案。
+        const val DEFAULT_SERVER = ""
         const val DEFAULT_PORT = 7000
         const val DEFAULT_HOST = ""
-        const val DEFAULT_TOKEN = "dirtunnel-public-default-token"
+        const val DEFAULT_TOKEN = ""
     }
 }

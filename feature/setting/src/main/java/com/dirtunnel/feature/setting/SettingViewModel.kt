@@ -45,6 +45,11 @@ class SettingViewModel @Inject constructor(
 
     val batteryRestricted: StateFlow<Boolean?> = healthMonitor.batteryRestricted
 
+    /** 底部导航栏不透明度（设置 → 外观）。 */
+    fun setNavBarOpacity(value: Float) {
+        viewModelScope.launch { settingsStore.setNavBarOpacity(value) }
+    }
+
     /** 协议组件 md5 校验结果（TECH 六.6）。 */
     private val _binaries = MutableStateFlow<List<com.dirtunnel.core.engine.model.BinaryStatus>>(emptyList())
     val binaries: StateFlow<List<com.dirtunnel.core.engine.model.BinaryStatus>> = _binaries.asStateFlow()
